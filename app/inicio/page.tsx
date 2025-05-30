@@ -194,6 +194,7 @@ export default function Dashboard() {
   );
   const ahorro = totalIngresos - totalGastos;
 
+
   // Crear ingreso
   async function handleCreateIngreso(data: { nombre: string, monto: number, tipo: string }) {
     await fetch('/api/ingresos', {
@@ -297,7 +298,7 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     Ingresos
-                    <Badge variant="secondary" className="ml-2">+S/{totalIngresos}</Badge>
+                    <Badge variant="secondary" className="ml-2">+S/{totalIngresos.toFixed(2)}</Badge>
                   </CardTitle>
                   <CardDescription>Lista de todos tus ingresos</CardDescription>
                 </div>
@@ -321,7 +322,7 @@ export default function Dashboard() {
                         <div>
                           <span className="font-medium">{ingreso.nombre}</span>
                           <span className="ml-2 text-green-700 dark:text-green-300 font-bold">
-                            +S/{ingreso.ingresos || ingreso.monto}
+                            +S/{Number(ingreso.ingresos || ingreso.monto).toFixed(2)}
                           </span>
                         </div>
                         <div className="flex gap-1">
@@ -352,7 +353,7 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     Gastos
-                    <Badge variant="destructive" className="ml-2">-S/{totalGastos}</Badge>
+                    <Badge variant="destructive" className="ml-2">-S/{totalGastos.toFixed(2)}</Badge>
                   </CardTitle>
                   <CardDescription>Lista de todos tus gastos</CardDescription>
                 </div>
@@ -376,7 +377,7 @@ export default function Dashboard() {
                         <div>
                           <span className="font-medium">{gasto.nombre}</span>
                           <span className="ml-2 text-red-700 dark:text-red-300 font-bold">
-                            -S/{gasto.gasto || gasto.monto}
+                            -S/{Number(gasto.gasto || gasto.monto).toFixed(2)}
                           </span>
                         </div>
                         <div className="flex gap-1">

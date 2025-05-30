@@ -2,8 +2,8 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 // Obtener un gasto por ID
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params
+export async function GET(request: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
 
   try {
     const gasto = await prisma.gastos.findUnique({ where: { id } })
@@ -17,8 +17,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 }
 
 // Editar un gasto por ID
-export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
 
   try {
     const data = await request.json()
@@ -36,8 +36,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 }
 
 // Eliminar un gasto por ID
-export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
 
   try {
     await prisma.gastos.delete({ where: { id } })
