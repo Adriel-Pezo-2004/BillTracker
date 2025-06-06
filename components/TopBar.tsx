@@ -25,9 +25,17 @@ export default function TopBar() {
     return () => window.removeEventListener('visibilitychange', updateUserId);
   }, []);
 
-  // Cierra el menú al navegar
+  // Si no está logeado, no renderiza el TopBar
+  if (!userId) return null;
+
   function handleMenuClick() {
     setMenuOpen(false);
+  }
+
+  function handleLogout() {
+    // Borra el cookie userId
+    document.cookie = 'userId=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    signOut({ callbackUrl: '/login' });
   }
 
   return (
@@ -49,19 +57,18 @@ export default function TopBar() {
         <Link href="/dashboard" className="hover:underline">
           Dashboard
         </Link>
-        {userId && (
-          <Button asChild variant="secondary">
-            <Link href={`/perfil/${userId}`}>Perfil</Link>
-          </Button>
-        )}
-        {userId && (
-          <Button
-            variant="destructive"
-            onClick={() => signOut({ callbackUrl: '/login' })}
-          >
-            Logout
-          </Button>
-        )}
+        <Button asChild variant="secondary">
+          <Link href={`/perfil/${userId}`}>Perfil</Link>
+        </Button>
+        <motion.button
+          whileTap={{ scale: 0.92 }}
+          whileHover={{ scale: 1.08 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+          className="ml-2"
+          onClick={handleLogout}
+        >
+          <Button variant="destructive">Logout</Button>
+        </motion.button>
       </nav>
 
       {/* Mobile menu button */}
@@ -92,26 +99,25 @@ export default function TopBar() {
               >
                 Dashboard
               </Link>
-              {userId && (
-                <Link
-                  href={`/perfil/${userId}`}
-                  className="px-4 py-2 hover:bg-accent"
-                  onClick={handleMenuClick}
-                >
-                  Perfil
-                </Link>
-              )}
-              {userId && (
-                <button
-                  className="px-4 py-2 text-left hover:bg-accent text-red-600"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    signOut({ callbackUrl: '/login' });
-                  }}
-                >
-                  Logout
-                </button>
-              )}
+              <Link
+                href={`/perfil/${userId}`}
+                className="px-4 py-2 hover:bg-accent"
+                onClick={handleMenuClick}
+              >
+                Perfil
+              </Link>
+              <motion.button
+                whileTap={{ scale: 0.92 }}
+                whileHover={{ scale: 1.08 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                className="px-4 py-2 text-left hover:bg-accent text-red-600"
+                onClick={() => {
+                  setMenuOpen(false);
+                  handleLogout();
+                }}
+              >
+                Logout
+              </motion.button>
             </motion.div>
           )}
         </AnimatePresence>

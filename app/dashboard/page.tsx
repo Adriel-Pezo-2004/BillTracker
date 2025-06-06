@@ -1,15 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { format, isSameDay, isSameWeek, isSameMonth, isSameYear, parseISO, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
+import { motion } from 'framer-motion';
 
-// Spinner igual que en /inicio
+
+
 function Spinner() {
   return (
     <div className="fixed inset-0 flex justify-center items-center bg-background z-50">
@@ -58,10 +61,31 @@ function groupBy<T>(arr: T[], key: (item: T) => string) {
   }, {} as Record<string, T[]>);
 }
 
+type FilterType = 'dia' | 'semana' | 'mes' | 'año' | 'rango';
+
+function getYears(items: Item[]) {
+  const years = new Set<number>();
+  items.forEach(item => {
+    if (item.createdAt) {
+      years.add(new Date(item.createdAt).getFullYear());
+    }
+  });
+  return Array.from(years).sort((a, b) => b - a);
+}
+
 export default function DashboardPage() {
   const [ingresos, setIngresos] = useState<Item[]>([]);
   const [gastos, setGastos] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [gastoTipo, setGastoTipo] = useState<string>('');
+  
+  // Filtros
+  const [filterType, setFilterType] = useState<FilterType>('mes');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
 
   useEffect(() => {
     async function fetchData() {
@@ -75,13 +99,63 @@ export default function DashboardPage() {
     fetchData();
   }, []);
 
+  // Años disponibles para filtro de año
+  const allYears = useMemo(() => {
+    const years = [...getYears(ingresos), ...getYears(gastos)];
+    return Array.from(new Set(years)).sort((a, b) => b - a);
+  }, [ingresos, gastos]);
+
+  function toLocalDate(dateString: string) {
+    const date = new Date(dateString);
+    // Ajusta a UTC-5 (Perú)
+    date.setHours(date.getHours() - (date.getTimezoneOffset() / 60) - 5);
+    return date;
+  }
+  
+
+  function filterByDate(items: Item[]) {
+    return items.filter(item => {
+      if (!item.createdAt) return false;
+      const date = toLocalDate(item.createdAt);
+      const now = new Date();
+  
+      switch (filterType) {
+        case 'dia':
+          if (!selectedDate) return true;
+          // selectedDate es YYYY-MM-DD, conviértelo a local
+          const selected = new Date(selectedDate + 'T00:00:00-05:00');
+          return isSameDay(date, selected);
+        case 'semana':
+          return isSameWeek(date, now, { weekStartsOn: 1 });
+        case 'mes':
+          if (!selectedMonth) return true;
+          const [year, month] = selectedMonth.split('-').map(Number);
+          return date.getFullYear() === year && date.getMonth() + 1 === month;
+        case 'año':
+          if (!selectedYear) return true;
+          return date.getFullYear() === Number(selectedYear);
+        case 'rango':
+          if (!rangeStart || !rangeEnd) return true;
+          const start = new Date(rangeStart + 'T00:00:00-05:00');
+          const end = new Date(rangeEnd + 'T23:59:59-05:00');
+          return isWithinInterval(date, { start, end });
+        default:
+          return true;
+      }
+    });
+  }
+  
+  // Filtrados
+  const ingresosFiltrados = useMemo(() => filterByDate(ingresos), [ingresos, filterType, selectedDate, selectedMonth, selectedYear, rangeStart, rangeEnd]);
+  const gastosFiltrados = useMemo(() => filterByDate(gastos), [gastos, filterType, selectedDate, selectedMonth, selectedYear, rangeStart, rangeEnd]);
+
   // Agrupar por tipo
-  const ingresosPorTipo = groupBy(ingresos, i => i.tipo || 'Otros');
-  const gastosPorTipo = groupBy(gastos, g => g.tipo || 'Otros');
+  const ingresosPorTipo = groupBy(ingresosFiltrados, i => i.tipo || 'Otros');
+  const gastosPorTipo = groupBy(gastosFiltrados, g => g.tipo || 'Otros');
 
   // Totales
-  const totalIngresos = ingresos.reduce((sum, i) => sum + Number(i.monto ?? 0), 0);
-  const totalGastos = gastos.reduce((sum, g) => sum + Number(g.monto ?? 0), 0);
+  const totalIngresos = ingresosFiltrados.reduce((sum, i) => sum + Number(i.monto ?? 0), 0);
+  const totalGastos = gastosFiltrados.reduce((sum, g) => sum + Number(g.monto ?? 0), 0);
 
   // Datos para gráficos
   const ingresosChartData = tipoIngresoOptions.map(tipo => ({
@@ -100,33 +174,132 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-5xl mx-auto py-10 px-4 space-y-10">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Dashboard</h1>
+      <motion.h1
+        className="text-3xl font-bold mb-6 text-gray-800"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        Dashboard
+      </motion.h1>
+
+      {/* FILTRO DE FECHA */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
+        <Card className="mb-4 border border-gray-200">
+          <CardContent className="flex flex-wrap gap-4 items-center py-4">
+            <label className="font-semibold">Filtrar por:</label>
+            <select
+              className="border rounded px-2 py-1"
+              value={filterType}
+              onChange={e => setFilterType(e.target.value as FilterType)}
+            >
+              <option value="dia">Día</option>
+              <option value="semana">Semana actual</option>
+              <option value="mes">Mes</option>
+              <option value="año">Año</option>
+              <option value="rango">Rango</option>
+            </select>
+            {filterType === 'dia' && (
+              <input
+                type="date"
+                className="border rounded px-2 py-1"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+              />
+            )}
+            {filterType === 'mes' && (
+              <input
+                type="month"
+                className="border rounded px-2 py-1"
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+              />
+            )}
+            {filterType === 'año' && (
+              <select
+                className="border rounded px-2 py-1"
+                value={selectedYear}
+                onChange={e => setSelectedYear(e.target.value)}
+              >
+                <option value="">Todos</option>
+                {allYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            )}
+            {filterType === 'rango' && (
+              <>
+                <input
+                  type="date"
+                  className="border rounded px-2 py-1"
+                  value={rangeStart}
+                  onChange={e => setRangeStart(e.target.value)}
+                />
+                <span>a</span>
+                <input
+                  type="date"
+                  className="border rounded px-2 py-1"
+                  value={rangeEnd}
+                  onChange={e => setRangeEnd(e.target.value)}
+                />
+              </>
+            )}
+            <Button
+              variant="outline"
+              className="ml-2"
+              onClick={() => {
+                setSelectedDate('');
+                setSelectedMonth('');
+                setSelectedYear('');
+                setRangeStart('');
+                setRangeEnd('');
+              }}
+            >
+              Limpiar filtro
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* RESUMEN */}
-      <Card className="mb-6 shadow-sm border border-gray-200">
-        <CardHeader>
-          <CardTitle className="text-xl">Resumen</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-8">
-          <div>
-            <div className="text-muted-foreground">Total ingresos</div>
-            <div className="text-2xl font-bold text-green-600">S/{totalIngresos.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground">Total gastos</div>
-            <div className="text-2xl font-bold text-red-600">S/{totalGastos.toLocaleString()}</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground">Balance</div>
-            <div className={`text-2xl font-bold ${totalIngresos - totalGastos >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-              S/{(totalIngresos - totalGastos).toLocaleString()}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.15 }}
+      >
+        <Card className="mb-6 shadow-sm border border-gray-200">
+          <CardHeader>
+            <CardTitle className="text-xl">Resumen</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-8">
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <div className="text-muted-foreground">Total ingresos</div>
+              <div className="text-2xl font-bold text-green-600">S/{totalIngresos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <div className="text-muted-foreground">Total gastos</div>
+              <div className="text-2xl font-bold text-red-600">S/{totalGastos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.05 }}>
+              <div className="text-muted-foreground">Balance</div>
+              <div className={`text-2xl font-bold ${totalIngresos - totalGastos >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                S/{(totalIngresos - totalGastos).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </motion.div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* INGRESOS */}
-      <section>
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+      >
         <Card className="mb-6 shadow-sm border border-gray-200">
           <CardHeader>
             <CardTitle className="text-lg text-green-700">Ingresos por tipo</CardTitle>
@@ -141,27 +314,30 @@ export default function DashboardPage() {
                 >
                   {tipo}:{' '}
                   S/
-                  {(
-                    ingresosPorTipo[tipo]?.reduce(
-                      (sum, i) => sum + Number(i.monto ?? 0),
-                      0
-                    ) || 0
-                  ).toLocaleString()}
+                  {(ingresosPorTipo[tipo]?.reduce(
+                    (sum, i) => sum + Number(i.monto ?? 0),
+                    0
+                  ) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Badge>
               ))}
             </div>
-            <div className="w-full h-72 mb-8">
+            <motion.div
+              className="w-full h-72 mb-8"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.25 }}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={ingresosChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="tipo" />
                   <YAxis />
-                  <Tooltip formatter={v => `S/${Number(v).toLocaleString()}`} />
+                  <Tooltip formatter={v => `S/${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                   <Legend />
                   <Bar dataKey="monto" fill="#22c55e" name="Ingresos" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </motion.div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -173,7 +349,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ingresos
+                  {ingresosFiltrados
                     .slice()
                     .sort((a, b) => {
                       if (!a.createdAt) return 1;
@@ -190,7 +366,7 @@ export default function DashboardPage() {
                         <td className="px-2 py-1">{i.nombre ?? 'Sin nombre'}</td>
                         <td className="px-2 py-1">{i.tipo ?? 'Otros'}</td>
                         <td className="px-2 py-1 text-right text-green-700">
-                          S/{Number(i.monto ?? 0).toLocaleString()}
+                          S/{Number(i.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))}
@@ -199,10 +375,14 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-      </section>
+      </motion.section>
 
       {/* GASTOS */}
-      <section>
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
+      >
         <Card className="mb-6 shadow-sm border border-gray-200">
           <CardHeader>
             <CardTitle className="text-lg text-red-700">Gastos por tipo</CardTitle>
@@ -217,27 +397,30 @@ export default function DashboardPage() {
                 >
                   {tipo}:{' '}
                   S/
-                  {(
-                    gastosPorTipo[tipo]?.reduce(
-                      (sum, g) => sum + Number(g.monto ?? 0),
-                      0
-                    ) || 0
-                  ).toLocaleString()}
+                  {(gastosPorTipo[tipo]?.reduce(
+                    (sum, g) => sum + Number(g.monto ?? 0),
+                    0
+                  ) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Badge>
               ))}
             </div>
-            <div className="w-full h-72 mb-8">
+            <motion.div
+              className="w-full h-72 mb-8"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.35 }}
+            >
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={gastosChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="tipo" />
                   <YAxis />
-                  <Tooltip formatter={v => `S/${Number(v).toLocaleString()}`} />
+                  <Tooltip formatter={v => `S/${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                   <Legend />
                   <Bar dataKey="monto" fill="#ef4444" name="Gastos" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </motion.div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -249,7 +432,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {gastos
+                  {gastosFiltrados
                     .slice()
                     .sort((a, b) => {
                       if (!a.createdAt) return 1;
@@ -266,7 +449,7 @@ export default function DashboardPage() {
                         <td className="px-2 py-1">{g.nombre ?? 'Sin nombre'}</td>
                         <td className="px-2 py-1">{g.tipo ?? 'Otros'}</td>
                         <td className="px-2 py-1 text-right text-red-700">
-                          S/{Number(g.monto ?? 0).toLocaleString()}
+                          S/{Number(g.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     ))}
@@ -275,7 +458,7 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
-      </section>
+      </motion.section>
     </div>
   );
 }
