@@ -9,9 +9,7 @@ import { es } from 'date-fns/locale';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
 } from 'recharts';
-import { motion } from 'framer-motion';
-
-
+import { motion, AnimatePresence } from 'framer-motion';
 
 function Spinner() {
   return (
@@ -73,11 +71,110 @@ function getYears(items: Item[]) {
   return Array.from(years).sort((a, b) => b - a);
 }
 
+// Componente Modal para mostrar todos los registros
+function ModalRegistros({ 
+  items, 
+  title, 
+  color, 
+  isOpen, 
+  onClose 
+}: { 
+  items: Item[], 
+  title: string, 
+  color: 'green' | 'red', 
+  isOpen: boolean, 
+  onClose: () => void 
+}) {
+  if (!isOpen) return null;
+
+  const sortedItems = items
+    .slice()
+    .sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className={`p-6 border-b ${color === 'green' ? 'bg-green-50' : 'bg-red-50'}`}>
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-bold ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                {title} ({sortedItems.length} registros)
+              </h2>
+              <Button variant="outline" onClick={onClose}>
+                ✕
+              </Button>
+            </div>
+          </div>
+          
+          <div className="p-6 overflow-y-auto max-h-[70vh]">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className={color === 'green' ? 'bg-green-50' : 'bg-red-50'}>
+                    <th className={`px-4 py-2 text-left ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                      Fecha
+                    </th>
+                    <th className={`px-4 py-2 text-left ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                      Nombre
+                    </th>
+                    <th className={`px-4 py-2 text-left ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                      Tipo
+                    </th>
+                    <th className={`px-4 py-2 text-right ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                      Monto
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedItems.map(item => (
+                    <tr key={item.id} className="border-b last:border-none hover:bg-gray-50">
+                      <td className="px-4 py-2">
+                        {item.createdAt
+                          ? format(new Date(item.createdAt), 'dd MMM yyyy', { locale: es })
+                          : 'Sin fecha'}
+                      </td>
+                      <td className="px-4 py-2">{item.nombre ?? 'Sin nombre'}</td>
+                      <td className="px-4 py-2">{item.tipo ?? 'Otros'}</td>
+                      <td className={`px-4 py-2 text-right font-medium ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                        S/{Number(item.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 export default function DashboardPage() {
   const [ingresos, setIngresos] = useState<Item[]>([]);
   const [gastos, setGastos] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [gastoTipo, setGastoTipo] = useState<string>('');
+  
+  // Estados para modales
+  const [modalIngresosOpen, setModalIngresosOpen] = useState(false);
+  const [modalGastosOpen, setModalGastosOpen] = useState(false);
   
   // Filtros
   const [filterType, setFilterType] = useState<FilterType>('mes');
@@ -111,18 +208,16 @@ export default function DashboardPage() {
     date.setHours(date.getHours() - (date.getTimezoneOffset() / 60) - 5);
     return date;
   }
-  
 
   function filterByDate(items: Item[]) {
     return items.filter(item => {
       if (!item.createdAt) return false;
       const date = toLocalDate(item.createdAt);
       const now = new Date();
-  
+
       switch (filterType) {
         case 'dia':
           if (!selectedDate) return true;
-          // selectedDate es YYYY-MM-DD, conviértelo a local
           const selected = new Date(selectedDate + 'T00:00:00-05:00');
           return isSameDay(date, selected);
         case 'semana':
@@ -144,10 +239,18 @@ export default function DashboardPage() {
       }
     });
   }
-  
+
   // Filtrados
   const ingresosFiltrados = useMemo(() => filterByDate(ingresos), [ingresos, filterType, selectedDate, selectedMonth, selectedYear, rangeStart, rangeEnd]);
-  const gastosFiltrados = useMemo(() => filterByDate(gastos), [gastos, filterType, selectedDate, selectedMonth, selectedYear, rangeStart, rangeEnd]);
+  
+  // Filtro por tipo de gasto
+  const gastosFiltrados = useMemo(() => {
+    let filtrados = filterByDate(gastos);
+    if (gastoTipo) {
+      filtrados = filtrados.filter(g => g.tipo === gastoTipo);
+    }
+    return filtrados;
+  }, [gastos, filterType, selectedDate, selectedMonth, selectedYear, rangeStart, rangeEnd, gastoTipo]);
 
   // Agrupar por tipo
   const ingresosPorTipo = groupBy(ingresosFiltrados, i => i.tipo || 'Otros');
@@ -167,6 +270,25 @@ export default function DashboardPage() {
     tipo,
     monto: gastosPorTipo[tipo]?.reduce((sum, g) => sum + Number(g.monto ?? 0), 0) || 0,
   }));
+
+  // Solo los últimos 5 registros para las tablas
+  const ingresosMostrados = ingresosFiltrados
+    .slice()
+    .sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt.localeCompare(a.createdAt);
+    })
+    .slice(0, 5);
+
+  const gastosMostrados = gastosFiltrados
+    .slice()
+    .sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt.localeCompare(a.createdAt);
+    })
+    .slice(0, 5);
 
   if (loading) {
     return <Spinner />;
@@ -265,6 +387,23 @@ export default function DashboardPage() {
         </Card>
       </motion.div>
 
+      {/* FILTRO POR TIPO DE GASTO */}
+      <Card className="mb-2 border border-gray-200">
+        <CardContent className="flex flex-wrap gap-4 items-center py-4">
+          <label className="font-semibold">Tipo de gasto:</label>
+          <select
+            className="border rounded px-2 py-1"
+            value={gastoTipo}
+            onChange={e => setGastoTipo(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {tipoGastoOptions.map(tipo => (
+              <option key={tipo} value={tipo}>{tipo}</option>
+            ))}
+          </select>
+        </CardContent>
+      </Card>
+
       {/* RESUMEN */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -338,7 +477,24 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </motion.div>
+            
+            {/* Tabla con solo 5 registros */}
             <div className="overflow-x-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-medium text-green-700">
+                  Últimos {ingresosMostrados.length} ingresos
+                </h3>
+                {ingresosFiltrados.length > 5 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalIngresosOpen(true)}
+                    className="text-green-700 border-green-300 hover:bg-green-50"
+                  >
+                    Ver todos ({ingresosFiltrados.length})
+                  </Button>
+                )}
+              </div>
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-green-50">
@@ -349,27 +505,20 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {ingresosFiltrados
-                    .slice()
-                    .sort((a, b) => {
-                      if (!a.createdAt) return 1;
-                      if (!b.createdAt) return -1;
-                      return b.createdAt.localeCompare(a.createdAt);
-                    })
-                    .map(i => (
-                      <tr key={i.id} className="border-b last:border-none">
-                        <td className="px-2 py-1">
-                          {i.createdAt
-                            ? format(new Date(i.createdAt), 'dd MMM yyyy', { locale: es })
-                            : 'Sin fecha'}
-                        </td>
-                        <td className="px-2 py-1">{i.nombre ?? 'Sin nombre'}</td>
-                        <td className="px-2 py-1">{i.tipo ?? 'Otros'}</td>
-                        <td className="px-2 py-1 text-right text-green-700">
-                          S/{Number(i.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
+                  {ingresosMostrados.map(i => (
+                    <tr key={i.id} className="border-b last:border-none">
+                      <td className="px-2 py-1">
+                        {i.createdAt
+                          ? format(new Date(i.createdAt), 'dd MMM yyyy', { locale: es })
+                          : 'Sin fecha'}
+                      </td>
+                      <td className="px-2 py-1">{i.nombre ?? 'Sin nombre'}</td>
+                      <td className="px-2 py-1">{i.tipo ?? 'Otros'}</td>
+                      <td className="px-2 py-1 text-right text-green-700">
+                        S/{Number(i.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -421,7 +570,24 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </motion.div>
+            
+            {/* Tabla con solo 5 registros */}
             <div className="overflow-x-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-sm font-medium text-red-700">
+                  Últimos {gastosMostrados.length} gastos
+                </h3>
+                {gastosFiltrados.length > 5 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalGastosOpen(true)}
+                    className="text-red-700 border-red-300 hover:bg-red-50"
+                  >
+                    Ver todos ({gastosFiltrados.length})
+                  </Button>
+                )}
+              </div>
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-red-50">
@@ -432,33 +598,43 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {gastosFiltrados
-                    .slice()
-                    .sort((a, b) => {
-                      if (!a.createdAt) return 1;
-                      if (!b.createdAt) return -1;
-                      return b.createdAt.localeCompare(a.createdAt);
-                    })
-                    .map(g => (
-                      <tr key={g.id} className="border-b last:border-none">
-                        <td className="px-2 py-1">
-                          {g.createdAt
-                            ? format(new Date(g.createdAt), 'dd MMM yyyy', { locale: es })
-                            : 'Sin fecha'}
-                        </td>
-                        <td className="px-2 py-1">{g.nombre ?? 'Sin nombre'}</td>
-                        <td className="px-2 py-1">{g.tipo ?? 'Otros'}</td>
-                        <td className="px-2 py-1 text-right text-red-700">
-                          S/{Number(g.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
+                  {gastosMostrados.map(g => (
+                    <tr key={g.id} className="border-b last:border-none">
+                      <td className="px-2 py-1">
+                        {g.createdAt
+                          ? format(new Date(g.createdAt), 'dd MMM yyyy', { locale: es })
+                          : 'Sin fecha'}
+                      </td>
+                      <td className="px-2 py-1">{g.nombre ?? 'Sin nombre'}</td>
+                      <td className="px-2 py-1">{g.tipo ?? 'Otros'}</td>
+                      <td className="px-2 py-1 text-right text-red-700">
+                        S/{Number(g.monto ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </CardContent>
         </Card>
       </motion.section>
+
+      {/* MODALES */}
+      <ModalRegistros
+        items={ingresosFiltrados}
+        title="Todos los Ingresos"
+        color="green"
+        isOpen={modalIngresosOpen}
+        onClose={() => setModalIngresosOpen(false)}
+      />
+      
+      <ModalRegistros
+        items={gastosFiltrados}
+        title="Todos los Gastos"
+        color="red"
+        isOpen={modalGastosOpen}
+        onClose={() => setModalGastosOpen(false)}
+      />
     </div>
   );
 }

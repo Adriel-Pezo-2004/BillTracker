@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { motion, AnimatePresence } from 'framer-motion';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 function Spinner() {
   return (
@@ -38,6 +40,113 @@ function getUserIdFromCookie() {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(/(?:^|;\s*)userId=([^;]*)/);
   return match ? decodeURIComponent(match[1]) : null;
+}
+
+// Modal para mostrar todos los registros
+function ModalTodosLosRegistros({ 
+  items, 
+  title, 
+  color, 
+  isOpen, 
+  onClose,
+  onEdit,
+  onDelete
+}: { 
+  items: any[], 
+  title: string, 
+  color: 'green' | 'red', 
+  isOpen: boolean, 
+  onClose: () => void,
+  onEdit: (item: any) => void,
+  onDelete: (id: string) => void
+}) {
+  if (!isOpen) return null;
+
+  const sortedItems = items
+    .slice()
+    .sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className={`p-6 border-b ${color === 'green' ? 'bg-green-50' : 'bg-red-50'}`}>
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-bold ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                {title} ({sortedItems.length} registros)
+              </h2>
+              <Button variant="outline" onClick={onClose}>
+                ✕
+              </Button>
+            </div>
+          </div>
+          
+          <div className="p-6 overflow-y-auto max-h-[70vh]">
+            <div className="space-y-3">
+              {sortedItems.map(item => (
+                <div key={item.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50">
+                  <div>
+                    <div className="font-medium">{item.nombre}</div>
+                    <div className="text-sm text-gray-500">
+                      {item.createdAt
+                        ? format(new Date(item.createdAt), 'dd MMM yyyy', { locale: es })
+                        : 'Sin fecha'}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      Tipo: {item.tipo || 'Sin tipo'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`font-bold ${color === 'green' ? 'text-green-700' : 'text-red-700'}`}>
+                      {color === 'green' ? '+' : '-'}S/{Number(item.ingresos || item.gasto || item.monto || 0).toFixed(2)}
+                    </span>
+                    <div className="flex gap-1">
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => onEdit(item)}
+                      >
+                        <span className="sr-only">Editar</span>
+                        <svg width="18" height="18" fill="none" stroke="currentColor">
+                          <path d="M15.232 5.232l-2.464-2.464a2 2 0 00-2.828 0l-6.536 6.536a2 2 0 000 2.828l2.464 2.464a2 2 0 002.828 0l6.536-6.536a2 2 0 000-2.828z" />
+                        </svg>
+                      </Button>
+                      <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={() => onDelete(item.id)}
+                      >
+                        <span className="sr-only">Eliminar</span>
+                        <svg width="18" height="18" fill="none" stroke="currentColor">
+                          <path d="M6 6l6 6M6 12L12 6" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
 }
 
 // Formulario para crear o editar ingresos/gastos
@@ -169,6 +278,10 @@ export default function Dashboard() {
   const [openGasto, setOpenGasto] = useState(false);
   const [editIngreso, setEditIngreso] = useState<{ id: string, nombre: string, monto: number, tipo: string } | null>(null);
   const [editGasto, setEditGasto] = useState<{ id: string, nombre: string, monto: number, tipo: string } | null>(null);
+  
+  // Modales para ver todos
+  const [modalIngresosOpen, setModalIngresosOpen] = useState(false);
+  const [modalGastosOpen, setModalGastosOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -194,6 +307,24 @@ export default function Dashboard() {
   );
   const ahorro = totalIngresos - totalGastos;
 
+  // Solo mostrar 5 registros
+  const ingresosMostrados = ingresos
+    .slice()
+    .sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt.localeCompare(a.createdAt);
+    })
+    .slice(0, 5);
+
+  const gastosMostrados = gastos
+    .slice()
+    .sort((a, b) => {
+      if (!a.createdAt) return 1;
+      if (!b.createdAt) return -1;
+      return b.createdAt.localeCompare(a.createdAt);
+    })
+    .slice(0, 5);
 
   // Crear ingreso
   async function handleCreateIngreso(data: { nombre: string, monto: number, tipo: string }) {
@@ -280,7 +411,7 @@ export default function Dashboard() {
                 whileTap={{ scale: 1.05 }}
                 style={{ opacity: 0.8, y: 0, transition: 'opacity 0.24s, transform 0.24s' }}
               >
-                S/{ahorro.toFixed(2)}
+                S/{ahorro.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </motion.div>
             </CardContent>
           </Card>
@@ -298,7 +429,7 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     Ingresos
-                    <Badge variant="secondary" className="ml-2">+S/{totalIngresos.toFixed(2)}</Badge>
+                    <Badge variant="secondary" className="ml-2">+S/{totalIngresos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Badge>
                   </CardTitle>
                   <CardDescription>Lista de todos tus ingresos</CardDescription>
                 </div>
@@ -307,10 +438,25 @@ export default function Dashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm text-muted-foreground">
+                    Últimos {ingresosMostrados.length} ingresos
+                  </span>
+                  {ingresos.length > 5 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setModalIngresosOpen(true)}
+                      className="text-green-700 border-green-300 hover:bg-green-50"
+                    >
+                      Ver todos ({ingresos.length})
+                    </Button>
+                  )}
+                </div>
                 <ul className="space-y-2">
-                  {ingresos.length === 0 && <li className="text-muted-foreground">Sin ingresos</li>}
+                  {ingresosMostrados.length === 0 && <li className="text-muted-foreground">Sin ingresos</li>}
                   <AnimatePresence>
-                    {ingresos.map((ingreso: any) => (
+                    {ingresosMostrados.map((ingreso: any) => (
                       <motion.li
                         key={ingreso.id}
                         initial={{ opacity: 0, x: 40 }}
@@ -322,7 +468,7 @@ export default function Dashboard() {
                         <div>
                           <span className="font-medium">{ingreso.nombre}</span>
                           <span className="ml-2 text-green-700 dark:text-green-300 font-bold">
-                            +S/{Number(ingreso.ingresos || ingreso.monto).toFixed(2)}
+                            +S/{Number(ingreso.ingresos || ingreso.monto).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="flex gap-1">
@@ -353,7 +499,7 @@ export default function Dashboard() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     Gastos
-                    <Badge variant="destructive" className="ml-2">-S/{totalGastos.toFixed(2)}</Badge>
+                    <Badge variant="destructive" className="ml-2">-S/{totalGastos.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Badge>
                   </CardTitle>
                   <CardDescription>Lista de todos tus gastos</CardDescription>
                 </div>
@@ -362,10 +508,25 @@ export default function Dashboard() {
                 </Button>
               </CardHeader>
               <CardContent>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm text-muted-foreground">
+                    Últimos {gastosMostrados.length} gastos
+                  </span>
+                  {gastos.length > 5 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setModalGastosOpen(true)}
+                      className="text-red-700 border-red-300 hover:bg-red-50"
+                    >
+                      Ver todos ({gastos.length})
+                    </Button>
+                  )}
+                </div>
                 <ul className="space-y-2">
-                  {gastos.length === 0 && <li className="text-muted-foreground">Sin gastos</li>}
+                  {gastosMostrados.length === 0 && <li className="text-muted-foreground">Sin gastos</li>}
                   <AnimatePresence>
-                    {gastos.map((gasto: any) => (
+                    {gastosMostrados.map((gasto: any) => (
                       <motion.li
                         key={gasto.id}
                         initial={{ opacity: 0, x: 40 }}
@@ -377,7 +538,7 @@ export default function Dashboard() {
                         <div>
                           <span className="font-medium">{gasto.nombre}</span>
                           <span className="ml-2 text-red-700 dark:text-red-300 font-bold">
-                            -S/{Number(gasto.gasto || gasto.monto).toFixed(2)}
+                            -S/{Number(gasto.gasto || gasto.monto).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className="flex gap-1">
@@ -401,7 +562,7 @@ export default function Dashboard() {
         
       </main>
       )}
-      {/* Footer */}
+      
       {/* Formularios modales */}
       <ItemForm
         open={openIngreso}
@@ -428,6 +589,37 @@ export default function Dashboard() {
         onSubmit={handleEditGasto}
         initial={editGasto || undefined}
         type="gasto"
+      />
+
+      {/* Modales para ver todos los registros */}
+      <ModalTodosLosRegistros
+        items={ingresos}
+        title="Todos los Ingresos"
+        color="green"
+        isOpen={modalIngresosOpen}
+        onClose={() => setModalIngresosOpen(false)}
+        onEdit={(item) => setEditIngreso({ 
+          id: item.id, 
+          nombre: item.nombre, 
+          monto: item.ingresos || item.monto, 
+          tipo: item.tipo 
+        })}
+        onDelete={handleDeleteIngreso}
+      />
+      
+      <ModalTodosLosRegistros
+        items={gastos}
+        title="Todos los Gastos"
+        color="red"
+        isOpen={modalGastosOpen}
+        onClose={() => setModalGastosOpen(false)}
+        onEdit={(item) => setEditGasto({ 
+          id: item.id, 
+          nombre: item.nombre, 
+          monto: item.gasto || item.monto, 
+          tipo: item.tipo 
+        })}
+        onDelete={handleDeleteGasto}
       />
     </div>
   );
