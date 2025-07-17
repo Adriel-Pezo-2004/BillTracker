@@ -12,7 +12,7 @@ function getUserIdFromCookie(request: NextRequest) {
 // PUT - Actualizar un gasto de tarjeta de crédito
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = getUserIdFromCookie(request);
@@ -22,7 +22,7 @@ export async function PUT(
     }
 
     const { nombre, gasto, tipo } = await request.json();
-    const { id } = params;
+    const { id } = await params;
 
     if (!nombre || gasto === undefined || !tipo) {
       return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 });
@@ -56,7 +56,7 @@ export async function PUT(
 // DELETE - Eliminar un gasto de tarjeta de crédito
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = getUserIdFromCookie(request);
@@ -65,7 +65,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Verificar que el gasto de tarjeta pertenece al usuario
     const gastoTarjetaExistente = await prisma.tarjetaCredito.findFirst({
