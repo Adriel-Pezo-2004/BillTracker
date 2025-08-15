@@ -71,6 +71,17 @@ function getYears(items: Item[]) {
   return Array.from(years).sort((a, b) => b - a);
 }
 
+function getContableMonth(date: Date) {
+  // Si el día es menor o igual a 10, pertenece al mes anterior
+  if (date.getDate() <= 10) {
+    // Retrocede un mes
+    const prevMonth = new Date(date.getFullYear(), date.getMonth() - 1, 11);
+    return { year: prevMonth.getFullYear(), month: prevMonth.getMonth() + 1 };
+  }
+  // Si es después del 10, pertenece al mes actual
+  return { year: date.getFullYear(), month: date.getMonth() + 1 };
+}
+
 // Componente Modal para mostrar todos los registros
 function ModalRegistros({ 
   items, 
@@ -222,13 +233,17 @@ export default function DashboardPage() {
           return isSameDay(date, selected);
         case 'semana':
           return isSameWeek(date, now, { weekStartsOn: 1 });
-        case 'mes':
+        case 'mes': {
           if (!selectedMonth) return true;
           const [year, month] = selectedMonth.split('-').map(Number);
-          return date.getFullYear() === year && date.getMonth() + 1 === month;
-        case 'año':
+          const contable = getContableMonth(date);
+          return contable.year === year && contable.month === month;
+        }
+        case 'año': {
           if (!selectedYear) return true;
-          return date.getFullYear() === Number(selectedYear);
+          const contable = getContableMonth(date);
+          return contable.year === Number(selectedYear);
+        }
         case 'rango':
           if (!rangeStart || !rangeEnd) return true;
           const start = new Date(rangeStart + 'T00:00:00-05:00');
